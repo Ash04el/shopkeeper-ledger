@@ -1,0 +1,37 @@
+
+> shopkeeper-ledger@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.5s
+ ✓ Compiled /src/middleware in 436ms (85 modules)
+ ○ Compiling /api/auth/mock-verify-otp ...
+ ✓ Compiled /api/auth/mock-verify-otp in 851ms (110 modules)
+[mock-verify-otp] Verifying OTP for phone: 212600000000
+[otp-store] select query succeeded, data: null
+ POST /api/auth/mock-verify-otp 400 in 2587ms
+ POST /api/auth/mock-verify-otp 400 in 38ms
+[mock-verify-otp] Verifying OTP for phone: 212600000000
+[otp-store] select query succeeded, data: null
+ POST /api/auth/mock-verify-otp 400 in 698ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 5.8s (526 modules)
+ ✓ Compiled in 1038ms (257 modules)
+ GET /login 200 in 6983ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 763ms (515 modules)
+ GET /icons/icon-192.png 404 in 972ms
+ ✓ Compiled /api/auth/mock-send-otp in 483ms (342 modules)
+[mock-send-otp] NEXT_PUBLIC_SUPABASE_URL: https://yixdxumvpwqbykefbxif.supabase.co
+[mock-send-otp] SUPABASE_SERVICE_ROLE_KEY: sb_secre... (length: 41)
+ POST /api/auth/mock-send-otp 200 in 2051ms
+ ✓ Compiled /api/auth/mock-verify-otp in 221ms (351 modules)
+[mock-verify-otp] Verifying OTP for phone: 0690254761
+[otp-store] select query succeeded, data: { id: '22cf3f1f-1255-4c90-94e5-cadbd4364e01' }
+[otp-store] update query succeeded for id: 22cf3f1f-1255-4c90-94e5-cadbd4364e01
+[mock-verify-otp] OTP verified successfully for phone: 0690254761
+ POST /api/auth/mock-verify-otp 500 in 3663ms
