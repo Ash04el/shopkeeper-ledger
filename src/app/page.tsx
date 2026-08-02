@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
-import { getMockSession } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const session = await getMockSession();
+  const supabase = await createClient();
 
-  redirect(session ? "/dashboard" : "/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  redirect(user ? "/dashboard" : "/login");
 }

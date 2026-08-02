@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getMockSession } from "@/lib/auth";
 import type { CustomerWithBalance } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
-  const session = await getMockSession();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Fetch all customers for the user (without transactions)
+  // Fetch all customers for the authenticated user
+  // RLS policies enforce auth.uid() = user_id at the database level
   const { data: customers, error } = await supabase
     .from("customers")
     .select("id, user_id, name, phone, note, created_at")
-    .eq("user_id", session.user_id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -26,7 +28,6 @@ export async function GET() {
   }
 
   // Fetch balances in parallel using the Postgres RPC function
-  // This avoids pulling all transactions into JS for aggregation
   const customersWithBalance: CustomerWithBalance[] = await Promise.all(
     (customers ?? []).map(
       async (c: {

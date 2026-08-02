@@ -1,37 +1,62 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME, parseSessionValue } from "@/lib/session";
+﻿import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const session = parseSessionValue(
-    request.cookies.get(SESSION_COOKIE_NAME)?.value
+  let supabaseResponse = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
   );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
   const isLoginPage = pathname === "/login";
   const isApiRoute = pathname.startsWith("/api");
-  const isAuthRoute = pathname.startsWith("/auth");
+  const isAuthApiRoute = pathname.startsWith("/api/auth");
 
-  // Allow auth API routes and login page without a session
-  if (isLoginPage || (isApiRoute && pathname.startsWith("/api/auth"))) {
-    if (session && !isApiRoute) {
+  // Allow login page and auth API routes without authentication
+  if (isLoginPage || isAuthApiRoute) {
+    if (user && !isApiRoute) {
       // Logged-in user visiting /login → redirect to dashboard
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);
     }
-    return NextResponse.next();
+    return supabaseResponse;
   }
 
-  // Protect everything else (dashboard, customers, other /api routes)
-  if (!session) {
+  // Protect everything else (dashboard, customers, data API routes)
+  // For API routes, return 401 JSON instead of redirecting to /login
+  if (!user) {
+    if (isApiRoute) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    if (!isApiRoute && !isAuthRoute) {
-      return NextResponse.redirect(url);
-    }
+    return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return supabaseResponse;
 }
 
 export const config = {

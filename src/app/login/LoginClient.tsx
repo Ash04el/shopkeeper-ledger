@@ -9,7 +9,6 @@ export default function LoginClient() {
 
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +25,7 @@ export default function LoginClient() {
     }
 
     try {
-      const res = await fetch("/api/auth/mock-send-otp", {
+      const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phone.trim() }),
@@ -40,8 +39,6 @@ export default function LoginClient() {
         return;
       }
 
-      // Store the dev code so the user can see it (mock flow)
-      setDevCode(data.devCode ?? null);
       setStep("otp");
     } catch {
       setError("مشكل فالاتصال بالخادم");
@@ -56,7 +53,7 @@ export default function LoginClient() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/mock-verify-otp", {
+      const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: phone.trim(), code: otp.trim() }),
@@ -82,7 +79,6 @@ export default function LoginClient() {
   const handleBack = () => {
     setStep("phone");
     setOtp("");
-    setDevCode(null);
     setError(null);
   };
 
@@ -174,17 +170,6 @@ export default function LoginClient() {
                 className="w-full rounded-xl border border-gray-300 px-4 py-4 text-center text-2xl tracking-[0.5em] text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
-
-            {devCode && (
-              <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-4 text-center">
-                <p className="text-xs font-medium text-emerald-700">
-                  🔑 الكود ديالك (تجريبي):
-                </p>
-                <p className="mt-1 text-2xl font-bold tracking-[0.3em] text-emerald-700">
-                  {devCode}
-                </p>
-              </div>
-            )}
 
             {error && (
               <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getMockSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +8,13 @@ interface RouteContext {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
-  const session = await getMockSession();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,7 +25,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     .from("customers")
     .select("id, name, phone, note")
     .eq("id", customerId)
-    .eq("user_id", session.user_id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (customerError) {
@@ -39,7 +40,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     .from("transactions")
     .select("id, customer_id, user_id, amount, type, description, created_at")
     .eq("customer_id", customerId)
-    .eq("user_id", session.user_id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) {

@@ -1,32 +1,38 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-// Server-only client that uses the service role key to bypass RLS.
-// Data isolation is enforced in the app layer by filtering on user_id
-// from the mock session cookie.
-export function createClient() {
+/**
+ * Creates a Supabase server client that reads/writes auth cookies.
+ * Uses the anon (public) key — RLS policies are enforced via auth.uid().
+ */
+export async function createClient() {
+  const cookieStore = await cookies();
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Detect placeholder values and throw a clear, actionable error
-  // so developers know to replace them with real credentials.
-  if (
-    !supabaseUrl ||
-    !serviceRoleKey ||
-    supabaseUrl.includes("your-project-ref") ||
-    serviceRoleKey.includes("your-service-role-key")
-  ) {
+  if (!supabaseUrl || !anonKey) {
     throw new Error(
-      "Supabase credentials are not configured. " +
-        "Please replace the placeholder values in .env.local with your real " +
-        "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. " +
-        `Current URL: ${supabaseUrl ?? "undefined"}`
+      "Missing Supabase environment variables. " +
+        "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local"
     );
   }
 
-  return createSupabaseClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
+  return createServerClient(supabaseUrl, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        } catch {
+          // The `setAll` method may be called from a Server Component.
+          // This can be ignored if middleware is also refreshing sessions.
+        }
+      },
     },
   });
 }
