@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, MessageCircle } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import type { Transaction } from "@/lib/types";
+import type { Transaction, ReminderLog } from "@/lib/types";
+import ReminderButton from "@/components/ReminderButton";
 
 interface CustomerHistoryPageProps {
   params: { id: string };
@@ -31,10 +32,20 @@ const formatTime = (dateStr: string) => {
   });
 };
 
-const waMeUrl = (phone: string, name: string, amount: number) => {
-  const text = `سلام سي ${name}، تذكير بسيط بالمبلغ المتبقي فالمحل (${amount} درهم). شكراً ليك!`;
-  return `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
-};
+/** Returns a human-readable relative time string in Darija */
+function timeAgo(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMinutes < 1) return "دابا";
+  if (diffMinutes < 60) return `منذ ${diffMinutes} دقيقة`;
+  if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+  return `منذ ${diffDays} يوم`;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +65,7 @@ export default async function CustomerHistoryPage({
   // Fetch the customer (must belong to the auth user)
   const { data: customer, error: customerError } = await supabase
     .from("customers")
-    .select("id, name, phone, note, created_at")
+    .select("id, name, phone, note, is_archived, created_at")
     .eq("id", params.id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -77,6 +88,18 @@ export default async function CustomerHistoryPage({
     return acc + (t.type === "credit" ? Number(t.amount) : -Number(t.amount));
   }, 0);
 
+  // Fetch reminders log for this customer
+  const { data: remindersData } = await supabase
+    .from("reminders_log")
+    .select("id, customer_id, user_id, balance_at_reminder, sent_at")
+    .eq("customer_id", params.id)
+    .eq("user_id", user.id)
+    .order("sent_at", { ascending: false });
+
+  const reminders = (remindersData ?? []) as ReminderLog[];
+  const lastReminder = reminders.length > 0 ? reminders[0] : null;
+  const totalReminders = reminders.length;
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-md">
@@ -91,21 +114,17 @@ export default async function CustomerHistoryPage({
               >
                 <ArrowRight className="h-5 w-5" />
               </Link>
-              <h1 className="text-lg font-bold text-gray-900">
-                {customer.name}
-              </h1>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">
+                  {customer.name}
+                </h1>
+                {customer.is_archived && (
+                  <span className="text-xs font-medium text-amber-600">
+                    📦 مؤرشف
+                  </span>
+                )}
+              </div>
             </div>
-            {customer.phone && (
-              <a
-                href={waMeUrl(customer.phone, customer.name, balance)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white transition hover:bg-green-600"
-                aria-label={`صيفط رسالة واتساب لـ ${customer.name}`}
-              >
-                <MessageCircle className="h-5 w-5" />
-              </a>
-            )}
           </div>
         </header>
 
@@ -141,6 +160,16 @@ export default async function CustomerHistoryPage({
                 {customer.phone}
               </p>
             )}
+            {customer.phone && !customer.is_archived && (
+              <div className="mt-3 flex justify-center">
+                <ReminderButton
+                  customerId={customer.id}
+                  phone={customer.phone}
+                  name={customer.name}
+                  balance={balance}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -149,6 +178,16 @@ export default async function CustomerHistoryPage({
           <div className="px-4 pt-3">
             <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-100">
               📝 {customer.note}
+            </div>
+          </div>
+        )}
+
+        {/* Last Reminder */}
+        {lastReminder && (
+          <div className="px-4 pt-3">
+            <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800 border border-blue-100">
+              💬 آخر تذكير: {timeAgo(lastReminder.sent_at)}
+              {totalReminders > 1 && ` (تذكير رقم ${totalReminders})`}
             </div>
           </div>
         )}

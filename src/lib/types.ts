@@ -13,6 +13,7 @@ export interface Customer {
   name: string;
   phone: string | null;
   note: string | null;
+  is_archived: boolean;
   created_at: string;
 }
 
@@ -28,4 +29,12 @@ export interface Transaction {
   type: TransactionType;
   description: string | null;
   created_at: string;
+}
+
+export interface ReminderLog {
+  id: string;
+  customer_id: string;
+  user_id: string;
+  balance_at_reminder: number;
+  sent_at: string;
 }

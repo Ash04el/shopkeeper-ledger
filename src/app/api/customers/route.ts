@@ -4,7 +4,7 @@ import type { CustomerWithBalance } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
 
   const {
@@ -15,46 +15,43 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Fetch all customers for the authenticated user
-  // RLS policies enforce auth.uid() = user_id at the database level
-  const { data: customers, error } = await supabase
-    .from("customers")
-    .select("id, user_id, name, phone, note, created_at")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  // Read optional query parameter: ?archived=true to include archived customers
+  const { searchParams } = new URL(request.url);
+  const includeArchived = searchParams.get("archived") === "true";
+
+  // Fetch from the customer_balances view with security_invoker = true
+  // RLS is enforced by the view; we additionally filter by user_id for defense-in-depth
+  let query = supabase
+    .from("customer_balances")
+    .select("*")
+    .eq("user_id", user.id);
+
+  if (!includeArchived) {
+    query = query.eq("is_archived", false);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Fetch balances in parallel using the Postgres RPC function
-  const customersWithBalance: CustomerWithBalance[] = await Promise.all(
-    (customers ?? []).map(
-      async (c: {
-        id: string;
-        user_id: string;
-        name: string;
-        phone: string | null;
-        note: string | null;
-        created_at: string;
-      }) => {
-        const { data: balanceData, error: rpcError } = await supabase
-          .rpc("get_customer_balance", { customer_id: c.id });
-
-        const balance = rpcError ? 0 : Number(balanceData ?? 0);
-
-        return {
-          id: c.id,
-          user_id: c.user_id,
-          name: c.name,
-          phone: c.phone,
-          note: c.note,
-          created_at: c.created_at,
-          balance,
-        };
-      }
-    )
+  // Map view rows to CustomerWithBalance type
+  const customers: CustomerWithBalance[] = (data ?? []).map(
+    (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      row: any
+    ) => ({
+      id: row.customer_id,
+      user_id: row.user_id,
+      name: row.name,
+      phone: row.phone,
+      note: row.note,
+      is_archived: row.is_archived,
+      created_at: row.created_at,
+      balance: Number(row.balance ?? 0),
+    })
   );
 
-  return NextResponse.json({ customers: customersWithBalance });
+  return NextResponse.json({ customers });
 }

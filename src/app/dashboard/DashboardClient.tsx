@@ -14,8 +14,13 @@ import {
   AlertCircle,
   MessageCircle,
   CheckCircle2,
+  Contact,
+  MoreHorizontal,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import type { CustomerWithBalance, TransactionType } from "@/lib/types";
+import ReminderButton from "@/components/ReminderButton";
 
 interface DashboardClientProps {
   phone: string;
@@ -29,24 +34,20 @@ function formatAmount(amount: number) {
   }).format(amount);
 }
 
-/** Normalize a phone number to the WhatsApp international format (+212...) */
-function toWhatsAppPhone(phone: string | null): string | null {
-  if (!phone) return null;
+/** Normalize an imported contact phone number to Moroccan format */
+function normalizeContactPhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
-  // Remove leading zeros or country code prefixes, then prepend +212
   if (digits.startsWith("212")) return `+${digits}`;
   if (digits.startsWith("00212")) return `+212${digits.slice(5)}`;
-  if (digits.startsWith("0")) return `+212${digits.slice(1)}`;
-  return `+${digits}`;
+  if (digits.length === 9 && (digits.startsWith("5") || digits.startsWith("6") || digits.startsWith("7"))) {
+    return `0${digits}`;
+  }
+  return digits;
 }
 
-function buildWhatsAppUrl(phone: string | null, customerName: string) {
-  const waPhone = toWhatsAppPhone(phone);
-  if (!waPhone) return null;
-  const text = encodeURIComponent(
-    `السلام ${customerName}، عافاك خاصك تخلص الحساب ديالك. مرحبا بيك.`
-  );
-  return `https://wa.me/${waPhone}?text=${text}`;
+/** Feature-detect the Contact Picker API */
+function isContactsApiSupported(): boolean {
+  return "contacts" in navigator && "ContactsManager" in window;
 }
 
 export default function DashboardClient({ phone }: DashboardClientProps) {
@@ -57,10 +58,20 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // --- Archived toggle ---
+  const [showArchived, setShowArchived] = useState(false);
+
+  // --- Open menu state (customer id whose dropdown is open) ---
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+
   // --- Modal state ---
   const [showModal, setShowModal] = useState<"customer" | "transaction" | null>(
     null
   );
+
+  // --- Sign out state ---
+  const [signingOut, setSigningOut] = useState(false);
+  const [showSignoutConfirm, setShowSignoutConfirm] = useState(false);
 
   // --- Add Customer state ---
   const [newName, setNewName] = useState("");
@@ -68,21 +79,26 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   const [customerSubmitting, setCustomerSubmitting] = useState(false);
   const [customerError, setCustomerError] = useState<string | null>(null);
   const [customerSuccess, setCustomerSuccess] = useState(false);
+  const [pickingContact, setPickingContact] = useState(false);
 
   // --- Add Transaction state ---
   const [txCustomerId, setTxCustomerId] = useState("");
   const [txType, setTxType] = useState<TransactionType | null>(null);
   const [txAmount, setTxAmount] = useState("");
+  const [txDescription, setTxDescription] = useState("");
   const [txSubmitting, setTxSubmitting] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
   const [txSuccess, setTxSuccess] = useState(false);
 
   // --- Fetch customers ---
-  const fetchCustomers = useCallback(async () => {
+  const fetchCustomers = useCallback(async (archived: boolean) => {
     setFetching(true);
     setFetchError(null);
     try {
-      const res = await fetch("/api/customers");
+      const url = archived
+        ? "/api/customers?archived=true"
+        : "/api/customers";
+      const res = await fetch(url);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "فشل في تحميل الزبناء");
@@ -97,14 +113,66 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   }, []);
 
   useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+    fetchCustomers(showArchived);
+  }, [showArchived, fetchCustomers]);
 
   // --- Sign out ---
   const handleSignout = async () => {
-    await fetch("/auth/signout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    setSigningOut(true);
+    try {
+      await fetch("/auth/signout", { method: "POST" });
+      router.push("/login");
+      router.refresh();
+    } catch {
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setSigningOut(false);
+      setShowSignoutConfirm(false);
+    }
+  };
+
+  // --- Archive / Unarchive ---
+  const handleToggleArchive = async (customerId: string, isArchived: boolean) => {
+    setOpenMenu(null);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_archived: !isArchived }),
+      });
+      if (res.ok) {
+        await fetchCustomers(showArchived);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // --- Contact Picker ---
+  const handlePickContact = async () => {
+    setPickingContact(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = navigator as any;
+      const contacts = await nav.contacts.select(
+        ["name", "tel"],
+        { multiple: false }
+      );
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0];
+        if (contact.name && contact.name.length > 0) {
+          setNewName(contact.name.join(" "));
+        }
+        if (contact.tel && contact.tel.length > 0) {
+          setNewPhone(normalizeContactPhone(contact.tel[0]));
+        }
+      }
+    } catch (err) {
+      console.warn("Contact picker failed:", err);
+    } finally {
+      setPickingContact(false);
+    }
   };
 
   // --- Add Customer ---
@@ -112,7 +180,6 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     e.preventDefault();
     setCustomerError(null);
 
-    // Client-side validation
     if (!newName.trim()) {
       setCustomerError("السم ضروري");
       return;
@@ -123,7 +190,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       return;
     }
 
-    if (txSubmitting) return; // double-submit guard
+    if (customerSubmitting) return;
     setCustomerSubmitting(true);
 
     try {
@@ -146,10 +213,8 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       setNewName("");
       setNewPhone("");
 
-      // Refresh customer list
-      await fetchCustomers();
+      await fetchCustomers(showArchived);
 
-      // Close modal after a short delay so user sees success
       setTimeout(() => {
         setShowModal(null);
         setCustomerSuccess(false);
@@ -182,7 +247,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       return;
     }
 
-    if (txSubmitting) return; // double-submit guard
+    if (txSubmitting) return;
     setTxSubmitting(true);
 
     try {
@@ -193,6 +258,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           customer_id: txCustomerId,
           amount: amountNum,
           type: txType,
+          description: txDescription.trim() || undefined,
         }),
       });
 
@@ -206,9 +272,9 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       setTxCustomerId("");
       setTxType(null);
       setTxAmount("");
+      setTxDescription("");
 
-      // Refresh customer list to update balances
-      await fetchCustomers();
+      await fetchCustomers(showArchived);
 
       setTimeout(() => {
         setShowModal(null);
@@ -221,12 +287,13 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     }
   };
 
-  // --- Helper to open modals with reset ---
+  // --- Helpers to open modals with reset ---
   const openCustomerModal = () => {
     setNewName("");
     setNewPhone("");
     setCustomerError(null);
     setCustomerSuccess(false);
+    setPickingContact(false);
     setShowModal("customer");
   };
 
@@ -234,24 +301,29 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     setTxCustomerId("");
     setTxType(null);
     setTxAmount("");
+    setTxDescription("");
     setTxError(null);
     setTxSuccess(false);
     setShowModal("transaction");
   };
 
-  // --- Compute metrics ---
-  const totalCustomers = customers.length;
-  const totalCredit = customers.reduce(
+  // --- Compute metrics (only active customers for the default view) ---
+  const activeCustomers = showArchived
+    ? customers
+    : customers.filter((c) => !c.is_archived);
+  const totalCustomers = activeCustomers.length;
+  const totalCredit = activeCustomers.reduce(
     (sum, c) => sum + (c.balance > 0 ? c.balance : 0),
     0
   );
-  const totalTransactions = customers.reduce((sum, c) => {
-    // We don't fetch individual transaction counts in the list API,
-    // but we can count unique customers that have a non-zero balance
-    // as an approximation. For a real metric we'd need a separate endpoint.
-    // Using a placeholder derived from balance data:
+  const totalTransactions = activeCustomers.reduce((sum, c) => {
     return sum + (c.balance !== 0 ? 1 : 0);
   }, 0);
+
+  const contactsSupported = isContactsApiSupported();
+
+  // Only show non-archived customers in the transaction select and list
+  const txSelectCustomers = customers.filter((c) => !c.is_archived);
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -273,12 +345,17 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
               </div>
             </div>
             <button
-              onClick={handleSignout}
-              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-              aria-label="خروج"
+              onClick={() => setShowSignoutConfirm(true)}
+              disabled={signingOut}
+              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              aria-label="تسجيل الخروج"
             >
-              <LogOut className="h-4 w-4" />
-              خروج
+              {signingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              تسجيل الخروج
             </button>
           </div>
         </header>
@@ -364,16 +441,37 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           </div>
 
           {/* Customer List */}
-          <h2 className="mb-3 mt-8 text-sm font-semibold text-gray-500">
-            الزبناء ديالك
-          </h2>
+          <div className="mb-3 mt-8 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-500">
+              {showArchived ? "الزبناء المؤرشفين" : "الزبناء ديالك"}
+            </h2>
+            <button
+              onClick={() => {
+                setShowArchived(!showArchived);
+                setOpenMenu(null);
+              }}
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-100"
+            >
+              {showArchived ? (
+                <>
+                  <Users className="h-3.5 w-3.5" />
+                  الزبناء النشيطين
+                </>
+              ) : (
+                <>
+                  <Archive className="h-3.5 w-3.5" />
+                  المؤرشفة
+                </>
+              )}
+            </button>
+          </div>
 
           {fetchError && (
             <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-50 p-4 text-red-700">
               <AlertCircle className="h-5 w-5 flex-shrink-0" />
               <p className="text-sm">{fetchError}</p>
               <button
-                onClick={fetchCustomers}
+                onClick={() => fetchCustomers(showArchived)}
                 className="mr-auto rounded-lg bg-red-100 px-3 py-1 text-sm font-medium hover:bg-red-200"
               >
                 حاول مرة أخرى
@@ -390,9 +488,13 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           {!fetching && !fetchError && customers.length === 0 && (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
               <div className="mb-2 text-4xl">📒</div>
-              <p className="font-medium text-gray-700">تا زبون</p>
+              <p className="font-medium text-gray-700">
+                {showArchived ? "تا زبون مؤرشف" : "تا زبون"}
+              </p>
               <p className="mt-1 text-sm text-gray-500">
-                زيد أول زبون ديالك باش تبدأ
+                {showArchived
+                  ? "مازال ما أرشفتي حتى زبون"
+                  : "زيد أول زبون ديالك باش تبدأ"}
               </p>
             </div>
           )}
@@ -400,11 +502,12 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           {!fetching && !fetchError && customers.length > 0 && (
             <div className="space-y-2">
               {customers.map((c) => {
-                const waUrl = buildWhatsAppUrl(c.phone, c.name);
                 return (
                   <div
                     key={c.id}
-                    className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                    className={`relative flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm ${
+                      c.is_archived ? "opacity-60" : ""
+                    }`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-base font-bold text-gray-900">
@@ -420,7 +523,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <div className="text-left" dir="ltr">
                         <p
                           className={`text-lg font-extrabold ${
@@ -442,17 +545,68 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                         </p>
                       </div>
 
-                      {waUrl && (
-                        <a
-                          href={waUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 transition hover:bg-emerald-200 active:scale-95"
-                          aria-label={`واتساب ${c.name}`}
-                        >
-                          <MessageCircle className="h-5 w-5" />
-                        </a>
+                      {c.phone && !c.is_archived && (
+                        <ReminderButton
+                          customerId={c.id}
+                          phone={c.phone}
+                          name={c.name}
+                          balance={c.balance}
+                        />
                       )}
+
+                      {/* Dropdown menu trigger */}
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setOpenMenu(openMenu === c.id ? null : c.id)
+                          }
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                          aria-label="خيارات"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+
+                        {openMenu === c.id && (
+                          <>
+                            {/* Backdrop */}
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setOpenMenu(null)}
+                            />
+                            {/* Menu */}
+                            <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                              <button
+                                onClick={() =>
+                                  handleToggleArchive(c.id, c.is_archived)
+                                }
+                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
+                              >
+                                {c.is_archived ? (
+                                  <>
+                                    <ArchiveRestore className="h-4 w-4 text-emerald-500" />
+                                    إلغاء الأرشفة
+                                  </>
+                                ) : (
+                                  <>
+                                    <Archive className="h-4 w-4 text-amber-500" />
+                                    أرشفة
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenMenu(null);
+                                  router.push(`/customers/${c.id}`);
+                                }}
+                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
+                              >
+                                <MessageCircle className="h-4 w-4 text-blue-500" />
+                                التفاصيل
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -461,6 +615,40 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           )}
         </div>
       </div>
+
+      {/* ===== Sign Out Confirmation Dialog ===== */}
+      {showSignoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+            <p className="mb-2 text-center text-lg font-bold text-gray-900">
+              واش متأكد بغيتي تخرج؟
+            </p>
+            <p className="mb-6 text-center text-sm text-gray-500">
+              غادي تخرج من الحساب وترجع لصفحة الدخول
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowSignoutConfirm(false)}
+                disabled={signingOut}
+                className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                لا، بقى
+              </button>
+              <button
+                onClick={handleSignout}
+                disabled={signingOut}
+                className="flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                {signingOut ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "نعم، خرج"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Add Customer Modal ===== */}
       {showModal === "customer" && (
@@ -486,6 +674,31 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
             </div>
 
             <form onSubmit={handleAddCustomer} className="space-y-4">
+              {/* Contact Picker button */}
+              {contactsSupported ? (
+                <button
+                  type="button"
+                  onClick={handlePickContact}
+                  disabled={pickingContact}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                >
+                  {pickingContact ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Contact className="h-4 w-4" />
+                  )}
+                  استورد من جهات الاتصال
+                </button>
+              ) : (
+                <div className="group relative flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-400">
+                  <Contact className="h-4 w-4" />
+                  استورد من جهات الاتصال
+                  <span className="absolute -bottom-2 left-1/2 hidden -translate-x-1/2 translate-y-full rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-white group-hover:block whitespace-nowrap">
+                    غير متوفر فهاد المتصفح
+                  </span>
+                </div>
+              )}
+
               <div>
                 <label
                   htmlFor="cust-name"
@@ -616,7 +829,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                   className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
                   <option value="">...</option>
-                  {customers.map((c) => (
+                  {txSelectCustomers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} {c.balance !== 0 ? `(${formatAmount(c.balance)} درهم)` : ""}
                     </option>
@@ -643,6 +856,24 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                   step="0.01"
                   min="0.01"
                   className="w-full rounded-xl border border-gray-300 px-4 py-4 text-center text-3xl font-bold text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+
+              {/* Description (Note) */}
+              <div>
+                <label
+                  htmlFor="tx-description"
+                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                >
+                  ملاحظة (اختياري)
+                </label>
+                <input
+                  id="tx-description"
+                  type="text"
+                  value={txDescription}
+                  onChange={(e) => setTxDescription(e.target.value)}
+                  placeholder="شرا خبز وحليب"
+                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
