@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardClient from "./DashboardClient";
@@ -17,5 +18,15 @@ export default async function DashboardPage() {
 
   const phone = user.phone ?? "";
 
-  return <DashboardClient phone={phone} />;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gray-50">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+        </div>
+      }
+    >
+      <DashboardClient phone={phone} />
+    </Suspense>
+  );
 }

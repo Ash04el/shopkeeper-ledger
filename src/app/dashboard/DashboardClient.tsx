@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   LogOut,
   Plus,
@@ -17,10 +17,13 @@ import {
   Contact,
   MoreHorizontal,
   Archive,
-  ArchiveRestore,
+  TrendingUp,
+  CreditCard,
+  Banknote,
 } from "lucide-react";
 import type { CustomerWithBalance, TransactionType } from "@/lib/types";
 import ReminderButton from "@/components/ReminderButton";
+import ArchiveCustomerButton from "@/components/ArchiveCustomerButton";
 
 interface DashboardClientProps {
   phone: string;
@@ -52,11 +55,21 @@ function isContactsApiSupported(): boolean {
 
 export default function DashboardClient({ phone }: DashboardClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // --- Data state ---
   const [customers, setCustomers] = useState<CustomerWithBalance[]>([]);
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // --- Analytics state ---
+  const [analytics, setAnalytics] = useState<{
+    total_active_customers: number;
+    total_outstanding_credit: number;
+    total_payments_all_time: number;
+    active_debtors_count: number;
+  } | null>(null);
+  const [, setAnalyticsLoading] = useState(true);
 
   // --- Archived toggle ---
   const [showArchived, setShowArchived] = useState(false);
@@ -112,9 +125,45 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     }
   }, []);
 
+  // --- Fetch analytics ---
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch("/api/analytics");
+      if (res.ok) {
+        const data = await res.json();
+        // analytics is an array with one row from the function
+        const row = Array.isArray(data.analytics) ? data.analytics[0] : null;
+        if (row) {
+          setAnalytics(row);
+        }
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCustomers(showArchived);
-  }, [showArchived, fetchCustomers]);
+    fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
+
+  // --- Pre-fill transaction from query param ---
+  useEffect(() => {
+    const prefillCustomer = searchParams.get("tx_customer");
+    if (prefillCustomer) {
+      setTxCustomerId(prefillCustomer);
+      setTxType(null);
+      setTxAmount("");
+      setTxDescription("");
+      setTxError(null);
+      setTxSuccess(false);
+      setShowModal("transaction");
+    }
+  }, [searchParams]);
 
   // --- Sign out ---
   const handleSignout = async () => {
@@ -129,23 +178,6 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     } finally {
       setSigningOut(false);
       setShowSignoutConfirm(false);
-    }
-  };
-
-  // --- Archive / Unarchive ---
-  const handleToggleArchive = async (customerId: string, isArchived: boolean) => {
-    setOpenMenu(null);
-    try {
-      const res = await fetch(`/api/customers/${customerId}/archive`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_archived: !isArchived }),
-      });
-      if (res.ok) {
-        await fetchCustomers(showArchived);
-      }
-    } catch {
-      // ignore
     }
   };
 
@@ -275,6 +307,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       setTxDescription("");
 
       await fetchCustomers(showArchived);
+      await fetchAnalytics();
 
       setTimeout(() => {
         setShowModal(null);
@@ -409,6 +442,56 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
               <p className="mt-0.5 text-xs font-medium text-gray-500">درهم</p>
             </div>
           </div>
+
+          {/* Analytics Widget */}
+          {analytics && !showArchived && (
+            <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                <h3 className="text-sm font-semibold text-gray-500">
+                  ملخص المحل
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-emerald-600" />
+                    <p className="text-xs text-gray-500">الزبناء النشيطين</p>
+                  </div>
+                  <p className="mt-1 text-xl font-bold text-gray-900">
+                    {analytics.total_active_customers}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-red-50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <CreditCard className="h-3.5 w-3.5 text-red-500" />
+                    <p className="text-xs text-gray-500">المبلغ لي باقي</p>
+                  </div>
+                  <p className="mt-1 text-xl font-bold text-red-600">
+                    {formatAmount(Number(analytics.total_outstanding_credit))}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+                    <p className="text-xs text-gray-500">المدفوعات الكلية</p>
+                  </div>
+                  <p className="mt-1 text-xl font-bold text-emerald-600">
+                    {formatAmount(Number(analytics.total_payments_all_time))}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-amber-50 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                    <p className="text-xs text-gray-500">المديونين</p>
+                  </div>
+                  <p className="mt-1 text-xl font-bold text-amber-600">
+                    {analytics.active_debtors_count}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Quick Actions */}
           <h2 className="mb-3 mt-8 text-sm font-semibold text-gray-500">
@@ -575,24 +658,10 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                             />
                             {/* Menu */}
                             <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-                              <button
-                                onClick={() =>
-                                  handleToggleArchive(c.id, c.is_archived)
-                                }
-                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
-                              >
-                                {c.is_archived ? (
-                                  <>
-                                    <ArchiveRestore className="h-4 w-4 text-emerald-500" />
-                                    إلغاء الأرشفة
-                                  </>
-                                ) : (
-                                  <>
-                                    <Archive className="h-4 w-4 text-amber-500" />
-                                    أرشفة
-                                  </>
-                                )}
-                              </button>
+                              <ArchiveCustomerButton
+                                customerId={c.id}
+                                isArchived={c.is_archived}
+                              />
                               <button
                                 onClick={() => {
                                   setOpenMenu(null);
