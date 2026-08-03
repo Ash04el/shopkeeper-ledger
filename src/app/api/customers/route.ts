@@ -26,9 +26,8 @@ export async function GET(request: Request) {
     .select("*")
     .eq("user_id", user.id);
 
-  if (!includeArchived) {
-    query = query.eq("is_archived", false);
-  }
+  // Strict filter: when archived=true, show ONLY archived; otherwise, show ONLY active
+  query = query.eq("is_archived", includeArchived);
 
   const { data, error } = await query.order("created_at", { ascending: false });
 
