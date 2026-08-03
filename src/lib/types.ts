@@ -40,3 +40,27 @@ export interface ReminderLog {
   balance_at_reminder: number;
   sent_at: string;
 }
+
+export interface Category {
+  id: string;
+  user_id: string;
+  name: string;
+  emoji: string;
+  created_at: string;
+}
+
+export interface Product {
+  id: string;
+  user_id: string;
+  category_id: string | null;
+  name: string;
+  price: number;
+  emoji: string;
+  created_at: string;
+}
+
+export interface CartItem {
+  product: Product;
+  quantity: number;
+  category_name: string;
+}
