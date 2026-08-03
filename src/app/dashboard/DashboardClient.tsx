@@ -4,10 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   LogOut,
-  Plus,
   Users,
   ArrowLeftRight,
-  Wallet,
   X,
   Phone,
   Loader2,
@@ -20,6 +18,10 @@ import {
   TrendingUp,
   CreditCard,
   Banknote,
+  Home,
+  BarChart3,
+  Settings,
+  UserRound,
 } from "lucide-react";
 import type { CustomerWithBalance } from "@/lib/types";
 import ReminderButton from "@/components/ReminderButton";
@@ -76,13 +78,14 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   // --- Active tab ---
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
 
+  // --- Bottom nav: which tab is selected ---
+  const [bottomNavTab, setBottomNavTab] = useState<"home" | "customers" | "reports" | "settings">("home");
+
   // --- Open menu state (customer id whose dropdown is open) ---
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   // --- Modal state ---
-  const [showModal, setShowModal] = useState<"customer" | "transaction" | null>(
-    null
-  );
+  const [showModal, setShowModal] = useState<"customer" | "transaction" | null>(null);
 
   // --- Sign out state ---
   const [signingOut, setSigningOut] = useState(false);
@@ -129,7 +132,6 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       const res = await fetch("/api/analytics");
       if (res.ok) {
         const data = await res.json();
-        // analytics is an array with one row from the function
         const row = Array.isArray(data.analytics) ? data.analytics[0] : null;
         if (row) {
           setAnalytics(row);
@@ -280,9 +282,6 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     (sum, c) => sum + (c.balance > 0 ? c.balance : 0),
     0
   );
-  const totalTransactions = activeCustomers.reduce((sum, c) => {
-    return sum + (c.balance !== 0 ? 1 : 0);
-  }, 0);
 
   const contactsSupported = isContactsApiSupported();
 
@@ -290,21 +289,272 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   const displayedCustomers = activeTab === "active" ? activeCustomers : archivedCustomers;
   const allCustomersForModal = [...activeCustomers, ...archivedCustomers];
 
+  if (bottomNavTab === "customers") {
+    return (
+      <main className="min-h-screen bg-[#F8F9FF] pb-24">
+        <div className="mx-auto max-w-md">
+          {/* Header */}
+          <header className="sticky top-0 z-10 border-b border-slate-100 bg-white">
+            <div className="flex items-center justify-between px-4 py-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🏪</span>
+                <div>
+                  <h1 className="text-lg font-bold text-gray-900">دفتر المحل</h1>
+                  <p className="flex items-center gap-1 text-xs text-gray-500" dir="ltr">
+                    <Phone className="h-3 w-3" />
+                    {phone}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSignoutConfirm(true)}
+                disabled={signingOut}
+                className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+                aria-label="تسجيل الخروج"
+              >
+                {signingOut ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </header>
 
+          <div className="px-4 pt-4">
+            {/* Customer list rendered as full cards */}
+            {fetchError && (
+              <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-red-700">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <p className="text-sm">{fetchError}</p>
+                <button
+                  onClick={fetchBoth}
+                  className="mr-auto rounded-xl bg-red-100 px-3 py-1 text-sm font-medium hover:bg-red-200"
+                >
+                  حاول مرة أخرى
+                </button>
+              </div>
+            )}
+
+            {fetching && !fetchError && (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+              </div>
+            )}
+
+            {!fetching && !fetchError && displayedCustomers.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
+                <div className="mb-2 text-4xl">📒</div>
+                <p className="font-medium text-gray-700">
+                  {activeTab === "archived" ? "تا زبون مؤرشف" : "تا زبون"}
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  {activeTab === "archived"
+                    ? "مازال ما أرشفتي حتى زبون"
+                    : "زيد أول زبون ديالك باش تبدأ"}
+                </p>
+              </div>
+            )}
+
+            {!fetching && !fetchError && displayedCustomers.length > 0 && (
+              <div className="space-y-2">
+                {displayedCustomers.map((c) => {
+                  return (
+                    <div
+                      key={c.id}
+                      className="relative flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+                    >
+                      {/* Avatar + Name */}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">
+                          {c.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-base font-bold text-gray-900">
+                              {c.name}
+                            </p>
+                            {c.balance > 0 && (
+                              <span className="shrink-0 rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                                مديون
+                              </span>
+                            )}
+                          </div>
+                          {c.phone && (
+                            <p className="mt-0.5 text-xs text-gray-400" dir="ltr">
+                              {c.phone}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Balance badge */}
+                      <div className="flex items-center gap-3">
+                        <div className="text-left" dir="ltr">
+                          <p
+                            className={`text-lg font-extrabold amount-number ${
+                              c.balance > 0
+                                ? "text-[#EF4444]"
+                                : c.balance < 0
+                                  ? "text-[#10B981]"
+                                  : "text-gray-400"
+                            }`}
+                          >
+                            {formatAmount(Math.abs(c.balance))}
+                          </p>
+                          <p className="text-[10px] font-medium text-gray-400">
+                            {c.balance > 0
+                              ? "عليه"
+                              : c.balance < 0
+                                ? "عندو زيادة"
+                                : "0"}
+                          </p>
+                        </div>
+
+                        {c.phone && activeTab === "active" && (
+                          <ReminderButton
+                            customerId={c.id}
+                            phone={c.phone}
+                            name={c.name}
+                            balance={c.balance}
+                          />
+                        )}
+
+                        {activeTab === "active" ? (
+                          <div className="relative">
+                            <button
+                              onClick={() =>
+                                setOpenMenu(openMenu === c.id ? null : c.id)
+                              }
+                              className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                              aria-label="خيارات"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+
+                            {openMenu === c.id && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-10"
+                                  onClick={() => setOpenMenu(null)}
+                                />
+                                <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-2xl border border-slate-100 bg-white py-1 shadow-lg">
+                                  <ArchiveCustomerButton
+                                    customerId={c.id}
+                                    isArchived={c.is_archived}
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenu(null);
+                                      router.push(`/customers/${c.id}`);
+                                    }}
+                                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
+                                  >
+                                    <MessageCircle className="h-4 w-4 text-emerald-500" />
+                                    التفاصيل
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <ArchiveCustomerButton
+                            customerId={c.id}
+                            isArchived={c.is_archived}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom Navigation Bar */}
+        <nav className="fixed bottom-0 right-0 left-0 z-30 border-t border-slate-100 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+          <div className="mx-auto flex max-w-md items-center justify-around px-4 py-3">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="flex flex-col items-center gap-1 text-emerald-600"
+            >
+              <Home className="h-5 w-5" />
+              <span className="text-[11px] font-semibold">الرئيسية</span>
+            </button>
+            <button
+              onClick={() => setBottomNavTab("customers")}
+              className="flex flex-col items-center gap-1 text-emerald-600"
+            >
+              <Users className="h-5 w-5" />
+              <span className="text-[11px] font-semibold">الزبناء</span>
+            </button>
+            <button
+              onClick={() => {}}
+              className="flex flex-col items-center gap-1 text-gray-400"
+            >
+              <BarChart3 className="h-5 w-5" />
+              <span className="text-[11px] font-semibold">التقارير</span>
+            </button>
+            <button
+              onClick={() => {}}
+              className="flex flex-col items-center gap-1 text-gray-400"
+            >
+              <Settings className="h-5 w-5" />
+              <span className="text-[11px] font-semibold">الإعدادات</span>
+            </button>
+          </div>
+        </nav>
+
+        {/* ===== Sign Out Confirmation Dialog ===== */}
+        {showSignoutConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+              <p className="mb-2 text-center text-lg font-bold text-gray-900">
+                واش متأكد بغيتي تخرج؟
+              </p>
+              <p className="mb-6 text-center text-sm text-gray-500">
+                غادي تخرج من الحساب وترجع لصفحة الدخول
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowSignoutConfirm(false)}
+                  disabled={signingOut}
+                  className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  لا، بقى
+                </button>
+                <button
+                  onClick={handleSignout}
+                  disabled={signingOut}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+                >
+                  {signingOut ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "نعم، خرج"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  // ---- HOME TAB (default view) ----
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-[#F8F9FF] pb-28">
       <div className="mx-auto max-w-md">
         {/* Header */}
-        <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
+        <header className="sticky top-0 z-10 border-b border-slate-100 bg-white">
           <div className="flex items-center justify-between px-4 py-4">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🏪</span>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">دفتر المحل</h1>
-                <p
-                  className="flex items-center gap-1 text-xs text-gray-500"
-                  dir="ltr"
-                >
+                <p className="flex items-center gap-1 text-xs text-gray-500" dir="ltr">
                   <Phone className="h-3 w-3" />
                   {phone}
                 </p>
@@ -313,7 +563,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
             <button
               onClick={() => setShowSignoutConfirm(true)}
               disabled={signingOut}
-              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
               aria-label="تسجيل الخروج"
             >
               {signingOut ? (
@@ -321,64 +571,72 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
               ) : (
                 <LogOut className="h-4 w-4" />
               )}
-              تسجيل الخروج
             </button>
           </div>
         </header>
 
-        <div className="px-4 pb-24 pt-4">
-          {/* Metric cards */}
+        <div className="px-4 pb-4 pt-6">
+          {/* 3 Summary Metric Cards */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
-                <Users className="h-5 w-5 text-emerald-600" />
+            {/* Total Debt (Red) */}
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#EF4444]/10">
+                <CreditCard className="h-5 w-5 text-[#EF4444]" />
               </div>
-              <p className="text-2xl font-bold text-gray-900">
-                {fetching ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                ) : (
-                  totalActive
-                )}
-              </p>
-              <p className="mt-0.5 text-xs font-medium text-gray-500">
-                الزبناء
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100">
-                <ArrowLeftRight className="h-5 w-5 text-blue-600" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">
-                {fetching ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                ) : (
-                  totalTransactions
-                )}
-              </p>
-              <p className="mt-0.5 text-xs font-medium text-gray-500">
-                نشيطين
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
-                <Wallet className="h-5 w-5 text-amber-600" />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-extrabold text-gray-900 amount-number">
                 {fetching ? (
                   <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
                 ) : (
                   formatAmount(totalCredit)
                 )}
               </p>
-              <p className="mt-0.5 text-xs font-medium text-gray-500">درهم</p>
+              <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                كريدي كامل
+              </p>
+            </div>
+
+            {/* Total Payments (Green) */}
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-[#10B981]/10">
+                <Banknote className="h-5 w-5 text-[#10B981]" />
+              </div>
+              <p className="text-2xl font-extrabold text-gray-900 amount-number">
+                {fetching ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                ) : analytics ? (
+                  formatAmount(Number(analytics.total_payments_all_time))
+                ) : (
+                  "0"
+                )}
+              </p>
+              <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                المدفوعات
+              </p>
+            </div>
+
+            {/* Active Debtors Count */}
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+              </div>
+              <p className="text-2xl font-extrabold text-gray-900">
+                {fetching ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                ) : analytics ? (
+                  analytics.active_debtors_count
+                ) : (
+                  "0"
+                )}
+              </p>
+              <p className="mt-0.5 text-xs font-semibold text-gray-500">
+                المديونين
+              </p>
             </div>
           </div>
 
-          {/* Analytics Widget */}
-          {analytics && activeTab === "active" && (
-            <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+          {/* Analytics Summary Widget */}
+          {analytics && (
+            <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-emerald-600" />
                 <h3 className="text-sm font-semibold text-gray-500">
@@ -391,16 +649,16 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                     <Users className="h-3.5 w-3.5 text-emerald-600" />
                     <p className="text-xs text-gray-500">الزبناء النشيطين</p>
                   </div>
-                  <p className="mt-1 text-xl font-bold text-gray-900">
+                  <p className="mt-1 text-xl font-extrabold text-gray-900">
                     {analytics.total_active_customers}
                   </p>
                 </div>
-                <div className="rounded-xl bg-red-50 p-3">
+                <div className="rounded-xl bg-[#EF4444]/10 p-3">
                   <div className="flex items-center gap-1.5">
-                    <CreditCard className="h-3.5 w-3.5 text-red-500" />
+                    <CreditCard className="h-3.5 w-3.5 text-[#EF4444]" />
                     <p className="text-xs text-gray-500">المبلغ لي باقي</p>
                   </div>
-                  <p className="mt-1 text-xl font-bold text-red-600">
+                  <p className="mt-1 text-xl font-extrabold text-[#EF4444] amount-number">
                     {formatAmount(Number(analytics.total_outstanding_credit))}
                   </p>
                 </div>
@@ -409,7 +667,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                     <Banknote className="h-3.5 w-3.5 text-emerald-600" />
                     <p className="text-xs text-gray-500">المدفوعات الكلية</p>
                   </div>
-                  <p className="mt-1 text-xl font-bold text-emerald-600">
+                  <p className="mt-1 text-xl font-extrabold text-[#10B981] amount-number">
                     {formatAmount(Number(analytics.total_payments_all_time))}
                   </p>
                 </div>
@@ -418,7 +676,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                     <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
                     <p className="text-xs text-gray-500">المديونين</p>
                   </div>
-                  <p className="mt-1 text-xl font-bold text-amber-600">
+                  <p className="mt-1 text-xl font-extrabold text-amber-600">
                     {analytics.active_debtors_count}
                   </p>
                 </div>
@@ -426,32 +684,29 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
             </div>
           )}
 
-          {/* Quick Actions */}
-          <h2 className="mb-3 mt-8 text-sm font-semibold text-gray-500">
-            إجراءات سريعة
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
+          {/* Centered Floating Quick-Action Buttons */}
+          <div className="mt-8 flex justify-center gap-4">
             <button
               onClick={openCustomerModal}
-              className="flex flex-col items-center gap-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 active:scale-[0.98]"
+              className="flex flex-col items-center gap-2 rounded-2xl border border-slate-100 bg-white px-6 py-5 shadow-sm transition-all duration-150 hover:border-emerald-200 hover:bg-emerald-50/50 active:scale-[0.98] active:shadow-none"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-                <Plus className="h-6 w-6 text-emerald-600" />
+                <UserRound className="h-6 w-6 text-emerald-600" />
               </div>
               <span className="text-sm font-bold text-gray-900">
-                زيد زبون
+                + زيد زبون
               </span>
             </button>
 
             <button
               onClick={openTransactionModal}
-              className="flex flex-col items-center gap-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 active:scale-[0.98]"
+              className="flex flex-col items-center gap-2 rounded-2xl border border-slate-100 bg-white px-6 py-5 shadow-sm transition-all duration-150 hover:border-emerald-200 hover:bg-emerald-50/50 active:scale-[0.98] active:shadow-none"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                <ArrowLeftRight className="h-6 w-6 text-blue-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                <ArrowLeftRight className="h-6 w-6 text-emerald-600" />
               </div>
               <span className="text-sm font-bold text-gray-900">
-                زيد معاملة
+                + زيد معاملة
               </span>
             </button>
           </div>
@@ -501,12 +756,12 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           </div>
 
           {fetchError && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl bg-red-50 p-4 text-red-700">
+            <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-red-700">
               <AlertCircle className="h-5 w-5 flex-shrink-0" />
               <p className="text-sm">{fetchError}</p>
               <button
                 onClick={fetchBoth}
-                className="mr-auto rounded-lg bg-red-100 px-3 py-1 text-sm font-medium hover:bg-red-200"
+                className="mr-auto rounded-xl bg-red-100 px-3 py-1 text-sm font-medium hover:bg-red-200"
               >
                 حاول مرة أخرى
               </button>
@@ -520,7 +775,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           )}
 
           {!fetching && !fetchError && displayedCustomers.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
               <div className="mb-2 text-4xl">📒</div>
               <p className="font-medium text-gray-700">
                 {activeTab === "archived" ? "تا زبون مؤرشف" : "تا زبون"}
@@ -539,7 +794,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                 return (
                   <div
                     key={c.id}
-                    className="relative flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                    className="relative flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -551,12 +806,14 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                             📦 مؤرشف
                           </span>
                         )}
+                        {c.balance > 0 && (
+                          <span className="shrink-0 rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                            مديون
+                          </span>
+                        )}
                       </div>
                       {c.phone && (
-                        <p
-                          className="mt-0.5 text-xs text-gray-400"
-                          dir="ltr"
-                        >
+                        <p className="mt-0.5 text-xs text-gray-400" dir="ltr">
                           {c.phone}
                         </p>
                       )}
@@ -565,11 +822,11 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                     <div className="flex items-center gap-2">
                       <div className="text-left" dir="ltr">
                         <p
-                          className={`text-lg font-extrabold ${
+                          className={`text-lg font-extrabold amount-number ${
                             c.balance > 0
-                              ? "text-red-600"
+                              ? "text-[#EF4444]"
                               : c.balance < 0
-                                ? "text-emerald-600"
+                                ? "text-[#10B981]"
                                 : "text-gray-400"
                           }`}
                         >
@@ -593,7 +850,6 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                         />
                       )}
 
-                      {/* Active tab: dropdown menu. Archived tab: direct unarchive button */}
                       {activeTab === "active" ? (
                         <div className="relative">
                           <button
@@ -612,7 +868,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                                 className="fixed inset-0 z-10"
                                 onClick={() => setOpenMenu(null)}
                               />
-                              <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                              <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-2xl border border-slate-100 bg-white py-1 shadow-lg">
                                 <ArchiveCustomerButton
                                   customerId={c.id}
                                   isArchived={c.is_archived}
@@ -624,7 +880,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                                   }}
                                   className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
                                 >
-                                  <MessageCircle className="h-4 w-4 text-blue-500" />
+                                  <MessageCircle className="h-4 w-4 text-emerald-500" />
                                   التفاصيل
                                 </button>
                               </div>
@@ -645,6 +901,40 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           )}
         </div>
       </div>
+
+      {/* Sticky Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 right-0 left-0 z-30 border-t border-slate-100 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="mx-auto flex max-w-md items-center justify-around px-4 py-3">
+          <button
+            onClick={() => setBottomNavTab("home")}
+            className="flex flex-col items-center gap-1 text-emerald-600"
+          >
+            <Home className="h-5 w-5" />
+            <span className="text-[11px] font-semibold">الرئيسية</span>
+          </button>
+          <button
+            onClick={() => setBottomNavTab("customers")}
+            className="flex flex-col items-center gap-1 text-gray-400"
+          >
+            <Users className="h-5 w-5" />
+            <span className="text-[11px] font-semibold">الزبناء</span>
+          </button>
+          <button
+            onClick={() => {}}
+            className="flex flex-col items-center gap-1 text-gray-400"
+          >
+            <BarChart3 className="h-5 w-5" />
+            <span className="text-[11px] font-semibold">التقارير</span>
+          </button>
+          <button
+            onClick={() => {}}
+            className="flex flex-col items-center gap-1 text-gray-400"
+          >
+            <Settings className="h-5 w-5" />
+            <span className="text-[11px] font-semibold">الإعدادات</span>
+          </button>
+        </div>
+      </nav>
 
       {/* ===== Sign Out Confirmation Dialog ===== */}
       {showSignoutConfirm && (
@@ -704,13 +994,12 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
             </div>
 
             <form onSubmit={handleAddCustomer} className="space-y-4">
-              {/* Contact Picker button */}
               {contactsSupported ? (
                 <button
                   type="button"
                   onClick={handlePickContact}
                   disabled={pickingContact}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
                 >
                   {pickingContact ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -720,7 +1009,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                   استورد من جهات الاتصال
                 </button>
               ) : (
-                <div className="group relative flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-400">
+                <div className="group relative flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-400">
                   <Contact className="h-4 w-4" />
                   استورد من جهات الاتصال
                   <span className="absolute -bottom-2 left-1/2 hidden -translate-x-1/2 translate-y-full rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-white group-hover:block whitespace-nowrap">
@@ -743,7 +1032,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="مثلاً: محمد"
                   autoFocus
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-2xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -761,18 +1050,18 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
                   placeholder="06 12 34 56 78"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-center text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-2xl border border-gray-300 px-4 py-3.5 text-center text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
               {customerError && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+                <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
                   {customerError}
                 </p>
               )}
 
               {customerSuccess && (
-                <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
                   <CheckCircle2 className="h-4 w-4" />
                   تزاد الزبون بنجاح!
                 </p>
@@ -781,7 +1070,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
               <button
                 type="submit"
                 disabled={customerSubmitting}
-                className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+                className="flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
               >
                 {customerSubmitting ? (
                   <Loader2 className="h-5 w-5 animate-spin" />

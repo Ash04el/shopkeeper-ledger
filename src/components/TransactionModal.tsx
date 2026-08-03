@@ -153,10 +153,10 @@ export default function TransactionModal({
                 setTxType("credit");
                 setError(null);
               }}
-              className={`rounded-xl px-4 py-4 text-base font-bold shadow-md transition ${
+              className={`rounded-2xl px-4 py-4 text-base font-bold shadow-md transition ${
                 isCredit
-                  ? "bg-red-600 text-white ring-2 ring-red-300"
-                  : "bg-red-100 text-red-700 hover:bg-red-200"
+                  ? "bg-[#DA3437] text-white ring-2 ring-red-300"
+                  : "bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20"
               }`}
             >
               🔴 كريدي
@@ -169,10 +169,10 @@ export default function TransactionModal({
                 setArticleName("");
                 setError(null);
               }}
-              className={`rounded-xl px-4 py-4 text-base font-bold shadow-md transition ${
+              className={`rounded-2xl px-4 py-4 text-base font-bold shadow-md transition ${
                 isPayment
-                  ? "bg-emerald-600 text-white ring-2 ring-emerald-300"
-                  : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                  ? "bg-[#10B981] text-white ring-2 ring-emerald-300"
+                  : "bg-[#10B981]/10 text-emerald-700 hover:bg-[#10B981]/20"
               }`}
             >
               🟢 خلاص
@@ -191,7 +191,7 @@ export default function TransactionModal({
               id="tm-customer"
               value={txCustomerId}
               onChange={(e) => setTxCustomerId(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full rounded-2xl border border-gray-300 px-4 py-3.5 text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             >
               <option value="">...</option>
               {activeCustomers.map((c) => (
@@ -218,10 +218,10 @@ export default function TransactionModal({
                         selectedCategory === cat.id ? null : cat.id
                       );
                     }}
-                    className={`flex items-center gap-2 rounded-xl px-3 py-3 text-xs font-medium transition ${
+                    className={`flex items-center gap-2 rounded-2xl px-3 py-3 text-xs font-medium transition ${
                       selectedCategory === cat.id
-                        ? "bg-red-100 border border-red-300 text-red-800"
-                        : "border border-gray-200 bg-white text-gray-600 hover:border-red-200 hover:bg-red-50"
+                        ? "bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444]"
+                        : "border border-gray-200 bg-white text-gray-600 hover:border-[#EF4444]/20 hover:bg-[#EF4444]/5"
                     }`}
                   >
                     <span className="text-base">{cat.emoji}</span>
@@ -250,7 +250,7 @@ export default function TransactionModal({
                 value={articleName}
                 onChange={(e) => setArticleName(e.target.value)}
                 placeholder="مثلاً: حليب، خبز..."
-                className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                className="w-full rounded-2xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
               />
               {/* Quick-add chips based on selected category */}
               {categorySuggestions[selectedCategory] &&
@@ -261,7 +261,7 @@ export default function TransactionModal({
                         key={suggestion}
                         type="button"
                         onClick={() => setArticleName(suggestion)}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                        className="rounded-xl border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-[#EF4444]/30 hover:bg-[#EF4444]/5 hover:text-[#EF4444]"
                       >
                         {suggestion}
                       </button>
@@ -289,7 +289,7 @@ export default function TransactionModal({
               dir="ltr"
               step="0.01"
               min="0.01"
-              className="w-full rounded-xl border border-gray-300 px-4 py-4 text-center text-3xl font-bold text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full rounded-2xl border border-gray-300 px-4 py-4 text-center text-3xl font-extrabold text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 amount-number"
             />
           </div>
 
@@ -307,7 +307,7 @@ export default function TransactionModal({
               value={txDescription}
               onChange={(e) => setTxDescription(e.target.value)}
               placeholder="شرا خبز وحليب"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="w-full rounded-2xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             />
           </div>
 
@@ -327,7 +327,7 @@ export default function TransactionModal({
           <button
             type="submit"
             disabled={submitting || !txType}
-            className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+          className="flex w-full items-center justify-center rounded-2xl bg-[#10B981] px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
           >
             {submitting ? (
               <Loader2 className="h-5 w-5 animate-spin" />

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Transaction, ReminderLog } from "@/lib/types";
 import ReminderButton from "@/components/ReminderButton";
 import ArchiveCustomerButton from "@/components/ArchiveCustomerButton";
+import CustomerQuickActions from "@/components/CustomerQuickActions";
 
 interface CustomerHistoryPageProps {
   params: { id: string };
@@ -102,10 +103,10 @@ export default async function CustomerHistoryPage({
   const totalReminders = reminders.length;
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-[#F8F9FF] pb-28">
       <div className="mx-auto max-w-md">
         {/* Header */}
-        <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
+        <header className="sticky top-0 z-10 border-b border-slate-100 bg-white">
           <div className="flex items-center justify-between px-4 py-4">
             <div className="flex items-center gap-2">
               <Link
@@ -129,24 +130,26 @@ export default async function CustomerHistoryPage({
           </div>
         </header>
 
-        {/* Balance card */}
-        <div className="px-4 pt-4">
+        {/* Large Prominent Balance Display Card */}
+        <div className="px-4 pt-6">
           <div
-            className={`rounded-2xl p-5 text-center shadow-sm ${
+            className={`rounded-3xl p-6 text-center shadow-sm border ${
               balance > 0
-                ? "bg-red-50 border border-red-100"
-                : "bg-white border border-gray-100"
+                ? "bg-[#EF4444]/10 border-[#EF4444]/30"
+                : balance < 0
+                ? "bg-[#10B981]/10 border-[#10B981]/30"
+                : "bg-white border-slate-100"
             }`}
           >
-            <p className="text-sm font-medium text-gray-500">
+            <p className="text-sm font-semibold text-gray-500">
               المبلغ المتبقي
             </p>
             <p
-              className={`mt-1 text-3xl font-bold ${
+              className={`mt-2 text-4xl font-extrabold amount-number ${
                 balance > 0
-                  ? "text-red-600"
+                  ? "text-[#EF4444]"
                   : balance < 0
-                  ? "text-emerald-600"
+                  ? "text-[#10B981]"
                   : "text-gray-900"
               }`}
             >
@@ -156,8 +159,18 @@ export default async function CustomerHistoryPage({
                 ? `+${formatAmount(Math.abs(balance))} درهم`
                 : "0 درهم"}
             </p>
+            {balance > 0 && (
+              <p className="mt-1 text-sm font-medium text-[#EF4444]/80">
+                عليه ديْن
+              </p>
+            )}
+            {balance < 0 && (
+              <p className="mt-1 text-sm font-medium text-[#10B981]/80">
+                عندو زيادة
+              </p>
+            )}
             {customer.phone && (
-              <p dir="ltr" className="mt-1 text-xs text-gray-400">
+              <p dir="ltr" className="mt-2 text-xs text-gray-400">
                 {customer.phone}
               </p>
             )}
@@ -174,10 +187,19 @@ export default async function CustomerHistoryPage({
           </div>
         </div>
 
+        {/* Quick-Actions Bar (WhatsApp, Call, PDF) */}
+        {!customer.is_archived && (
+          <CustomerQuickActions
+            phone={customer.phone}
+            name={customer.name}
+            balance={balance}
+          />
+        )}
+
         {/* Notes */}
         {customer.note && (
           <div className="px-4 pt-3">
-            <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-100">
+            <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-100">
               📝 {customer.note}
             </div>
           </div>
@@ -186,53 +208,67 @@ export default async function CustomerHistoryPage({
         {/* Last Reminder */}
         {lastReminder && (
           <div className="px-4 pt-3">
-            <div className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-800 border border-blue-100">
+            <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 border border-emerald-100">
               💬 آخر تذكير: {timeAgo(lastReminder.sent_at)}
               {totalReminders > 1 && ` (تذكير رقم ${totalReminders})`}
             </div>
           </div>
         )}
 
-        {/* Quick Actions */}
-        <div className="px-4 pt-4">
-          <h3 className="mb-2 text-xs font-semibold text-gray-400">
-            إجراءات سريعة
-          </h3>
-          <div className="flex flex-wrap gap-2">
+        {/* Full-Width Action Buttons */}
+        {!customer.is_archived && (
+          <div className="px-4 pt-6 space-y-3">
+            <h3 className="text-xs font-semibold text-gray-400 mb-1">
+              إجراءات سريعة
+            </h3>
+
+            {/* Add Debt (Red) */}
+            <Link
+              href={`/dashboard?tx_customer=${customer.id}`}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#DA3437] px-6 py-4 text-base font-bold text-white shadow-md transition hover:bg-[#C42E31] active:scale-[0.98]"
+            >
+              <CreditCard className="h-5 w-5" />
+              إضافة كريدي
+            </Link>
+
+            {/* Add Payment (Green) */}
+            <Link
+              href={`/dashboard?tx_customer=${customer.id}`}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#10B981] px-6 py-4 text-base font-bold text-white shadow-md transition hover:bg-emerald-700 active:scale-[0.98]"
+            >
+              <Banknote className="h-5 w-5" />
+              إضافة دفعة
+            </Link>
+
+            {/* Archive */}
+            <div className="flex justify-center pt-1">
+              <ArchiveCustomerButton
+                customerId={customer.id}
+                isArchived={customer.is_archived}
+                variant="button"
+              />
+            </div>
+          </div>
+        )}
+
+        {customer.is_archived && (
+          <div className="px-4 pt-6 flex justify-center">
             <ArchiveCustomerButton
               customerId={customer.id}
               isArchived={customer.is_archived}
               variant="button"
             />
-            {!customer.is_archived && (
-              <>
-                <Link
-                  href={`/dashboard?tx_customer=${customer.id}`}
-                  className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-100"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  إضافة كريدي
-                </Link>
-                <Link
-                  href={`/dashboard?tx_customer=${customer.id}`}
-                  className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
-                >
-                  <Banknote className="h-4 w-4" />
-                  إضافة دفعة
-                </Link>
-              </>
-            )}
           </div>
-        </div>
+        )}
 
         {/* Transactions */}
-        <div className="px-4 pb-24 pt-6">
+        <div className="px-4 pt-8">
           <h2 className="mb-3 text-sm font-semibold text-gray-500">
             الحركات ({txList.length})
           </h2>
 
           {txList.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
               <div className="mb-2 text-4xl">🧾</div>
               <p className="font-medium text-gray-700">مازال حتى حركة</p>
               <p className="mt-1 text-sm text-gray-500">
@@ -244,18 +280,18 @@ export default async function CustomerHistoryPage({
               {txList.map((tx) => (
                 <li
                   key={tx.id}
-                  className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                  className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <span
                         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
                           tx.type === "credit"
-                            ? "bg-red-100"
-                            : "bg-emerald-100"
+                            ? "bg-[#EF4444]/10"
+                            : "bg-[#10B981]/10"
                         }`}
                       >
-                        {tx.type === "credit" ? "🧾" : "💵"}
+                        {tx.type === "credit" ? "🔴" : "🟢"}
                       </span>
                       <div>
                         <p className="font-semibold text-gray-900">
@@ -280,10 +316,10 @@ export default async function CustomerHistoryPage({
                       </div>
                     </div>
                     <p
-                      className={`text-lg font-bold ${
+                      className={`text-lg font-extrabold amount-number ${
                         tx.type === "credit"
-                          ? "text-red-600"
-                          : "text-emerald-600"
+                          ? "text-[#EF4444]"
+                          : "text-[#10B981]"
                       }`}
                     >
                       {tx.type === "credit" ? "+" : "-"}

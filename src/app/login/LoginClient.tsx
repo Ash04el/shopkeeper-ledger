@@ -83,8 +83,8 @@ export default function LoginClient() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-6">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm border border-gray-100">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[#F8F9FF] px-6">
+      <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-sm border border-slate-100">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-3xl">
             🏪
@@ -113,12 +113,12 @@ export default function LoginClient() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="06 12 34 56 78"
-                className="w-full rounded-xl border border-gray-300 px-4 py-4 text-center text-lg text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-2xl border border-gray-300 px-4 py-4 text-center text-lg text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
 
             {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
                 {error}
               </p>
             )}
@@ -126,7 +126,7 @@ export default function LoginClient() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-4 text-lg font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+              className="flex w-full items-center justify-center rounded-2xl bg-[#10B981] px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -167,12 +167,12 @@ export default function LoginClient() {
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                 placeholder="••••••"
-                className="w-full rounded-xl border border-gray-300 px-4 py-4 text-center text-2xl tracking-[0.5em] text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="w-full rounded-2xl border border-gray-300 px-4 py-4 text-center text-2xl tracking-[0.5em] text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
 
             {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
                 {error}
               </p>
             )}
@@ -180,7 +180,7 @@ export default function LoginClient() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-4 text-lg font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+              className="flex w-full items-center justify-center rounded-2xl bg-[#10B981] px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
