@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     amount?: number;
     type?: string;
     description?: string;
+    category?: string;
+    article_name?: string;
   };
 
   try {
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { customer_id, amount, type, description } = body;
+  const { customer_id, amount, type, description, category, article_name } = body;
 
   if (!customer_id || typeof customer_id !== "string") {
     return NextResponse.json({ error: "customer_id is required" }, { status: 400 });
@@ -44,6 +46,14 @@ export async function POST(request: Request) {
 
   if (description !== undefined && typeof description !== "string") {
     return NextResponse.json({ error: "description must be a string" }, { status: 400 });
+  }
+
+  if (category !== undefined && typeof category !== "string") {
+    return NextResponse.json({ error: "category must be a string" }, { status: 400 });
+  }
+
+  if (article_name !== undefined && typeof article_name !== "string") {
+    return NextResponse.json({ error: "article_name must be a string" }, { status: 400 });
   }
 
   // Verify the customer belongs to the authenticated user
@@ -70,6 +80,8 @@ export async function POST(request: Request) {
       amount,
       type,
       description: description ?? null,
+      category: category ?? null,
+      article_name: article_name ?? null,
     })
     .select()
     .single();

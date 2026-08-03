@@ -78,7 +78,7 @@ export default async function CustomerHistoryPage({
   // Fetch transaction history
   const { data: transactions } = await supabase
     .from("transactions")
-    .select("id, customer_id, user_id, amount, type, description, created_at")
+    .select("id, customer_id, user_id, amount, type, description, category, article_name, created_at")
     .eq("customer_id", params.id)
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -261,8 +261,18 @@ export default async function CustomerHistoryPage({
                         <p className="font-semibold text-gray-900">
                           {tx.type === "credit" ? "كريدي" : "خلاص"}
                         </p>
+                        {tx.article_name && (
+                          <p className="text-xs text-gray-500">
+                            {tx.article_name}
+                            {tx.category && (
+                              <span className="ml-1 text-gray-400">
+                                ({tx.category === "basic_groceries" ? "غذائية" : tx.category === "dairy_breakfast" ? "حليب" : tx.category === "beverages" ? "مشروبات" : tx.category === "vegetables_fruits" ? "خضار" : tx.category === "sweets_snacks" ? "سناكات" : tx.category === "cleaning" ? "نظافة" : tx.category === "baby" ? "أطفال" : tx.category === "services" ? "خدمات" : tx.category})
+                              </span>
+                            )}
+                          </p>
+                        )}
                         {tx.description && (
-                          <p className="text-sm text-gray-500">{tx.description}</p>
+                          <p className="text-xs text-gray-400">{tx.description}</p>
                         )}
                         <p className="text-xs text-gray-400" dir="rtl">
                           {formatDate(tx.created_at)} - {formatTime(tx.created_at)}

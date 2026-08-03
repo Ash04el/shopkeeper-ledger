@@ -28,6 +28,8 @@ export interface Transaction {
   amount: number;
   type: TransactionType;
   description: string | null;
+  category: string | null;
+  article_name: string | null;
   created_at: string;
 }
 

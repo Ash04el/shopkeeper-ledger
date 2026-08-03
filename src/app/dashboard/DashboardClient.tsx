@@ -21,9 +21,10 @@ import {
   CreditCard,
   Banknote,
 } from "lucide-react";
-import type { CustomerWithBalance, TransactionType } from "@/lib/types";
+import type { CustomerWithBalance } from "@/lib/types";
 import ReminderButton from "@/components/ReminderButton";
 import ArchiveCustomerButton from "@/components/ArchiveCustomerButton";
+import TransactionModal from "@/components/TransactionModal";
 
 interface DashboardClientProps {
   phone: string;
@@ -58,7 +59,8 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   const searchParams = useSearchParams();
 
   // --- Data state ---
-  const [customers, setCustomers] = useState<CustomerWithBalance[]>([]);
+  const [activeCustomers, setActiveCustomers] = useState<CustomerWithBalance[]>([]);
+  const [archivedCustomers, setArchivedCustomers] = useState<CustomerWithBalance[]>([]);
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -71,8 +73,8 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   } | null>(null);
   const [, setAnalyticsLoading] = useState(true);
 
-  // --- Archived toggle ---
-  const [showArchived, setShowArchived] = useState(false);
+  // --- Active tab ---
+  const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
 
   // --- Open menu state (customer id whose dropdown is open) ---
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -94,30 +96,25 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   const [customerSuccess, setCustomerSuccess] = useState(false);
   const [pickingContact, setPickingContact] = useState(false);
 
-  // --- Add Transaction state ---
-  const [txCustomerId, setTxCustomerId] = useState("");
-  const [txType, setTxType] = useState<TransactionType | null>(null);
-  const [txAmount, setTxAmount] = useState("");
-  const [txDescription, setTxDescription] = useState("");
-  const [txSubmitting, setTxSubmitting] = useState(false);
-  const [txError, setTxError] = useState<string | null>(null);
-  const [txSuccess, setTxSuccess] = useState(false);
+  // --- Pre-fill transaction customer ---
+  const [prefillTxCustomer, setPrefillTxCustomer] = useState<string | undefined>(undefined);
 
-  // --- Fetch customers ---
-  const fetchCustomers = useCallback(async (archived: boolean) => {
+  // --- Fetch both active and archived customers ---
+  const fetchBoth = useCallback(async () => {
     setFetching(true);
     setFetchError(null);
     try {
-      const url = archived
-        ? "/api/customers?archived=true"
-        : "/api/customers";
-      const res = await fetch(url);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "فشل في تحميل الزبناء");
+      const [activeRes, archivedRes] = await Promise.all([
+        fetch("/api/customers"),
+        fetch("/api/customers?archived=true"),
+      ]);
+      if (!activeRes.ok || !archivedRes.ok) {
+        throw new Error("فشل في تحميل الزبناء");
       }
-      const data = await res.json();
-      setCustomers(data.customers ?? []);
+      const activeData = await activeRes.json();
+      const archivedData = await archivedRes.json();
+      setActiveCustomers(activeData.customers ?? []);
+      setArchivedCustomers(archivedData.customers ?? []);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "خطأ غير معروف");
     } finally {
@@ -146,21 +143,16 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   }, []);
 
   useEffect(() => {
-    fetchCustomers(showArchived);
+    fetchBoth();
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived]);
+  }, []);
 
   // --- Pre-fill transaction from query param ---
   useEffect(() => {
     const prefillCustomer = searchParams.get("tx_customer");
     if (prefillCustomer) {
-      setTxCustomerId(prefillCustomer);
-      setTxType(null);
-      setTxAmount("");
-      setTxDescription("");
-      setTxError(null);
-      setTxSuccess(false);
+      setPrefillTxCustomer(prefillCustomer);
       setShowModal("transaction");
     }
   }, [searchParams]);
@@ -245,7 +237,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
       setNewName("");
       setNewPhone("");
 
-      await fetchCustomers(showArchived);
+      await fetchBoth();
 
       setTimeout(() => {
         setShowModal(null);
@@ -258,66 +250,12 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
     }
   };
 
-  // --- Add Transaction ---
-  const handleAddTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTxError(null);
-
-    if (!txCustomerId) {
-      setTxError("اختار الزبون");
-      return;
-    }
-
-    if (!txType) {
-      setTxError("اختار النوع (كريدي ولا خلاص)");
-      return;
-    }
-
-    const amountNum = parseFloat(txAmount);
-    if (!txAmount || isNaN(amountNum) || amountNum <= 0) {
-      setTxError("المبلغ خاصو يكون رقم موجب");
-      return;
-    }
-
-    if (txSubmitting) return;
-    setTxSubmitting(true);
-
-    try {
-      const res = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer_id: txCustomerId,
-          amount: amountNum,
-          type: txType,
-          description: txDescription.trim() || undefined,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "فشل فإضافة المعاملة");
-      }
-
-      setTxSuccess(true);
-      setTxCustomerId("");
-      setTxType(null);
-      setTxAmount("");
-      setTxDescription("");
-
-      await fetchCustomers(showArchived);
-      await fetchAnalytics();
-
-      setTimeout(() => {
-        setShowModal(null);
-        setTxSuccess(false);
-      }, 800);
-    } catch (err) {
-      setTxError(err instanceof Error ? err.message : "خطأ غير معروف");
-    } finally {
-      setTxSubmitting(false);
-    }
+  // --- Transaction success handler ---
+  const handleTransactionSuccess = async () => {
+    setShowModal(null);
+    setPrefillTxCustomer(undefined);
+    await fetchBoth();
+    await fetchAnalytics();
   };
 
   // --- Helpers to open modals with reset ---
@@ -331,20 +269,13 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
   };
 
   const openTransactionModal = () => {
-    setTxCustomerId("");
-    setTxType(null);
-    setTxAmount("");
-    setTxDescription("");
-    setTxError(null);
-    setTxSuccess(false);
+    setPrefillTxCustomer(undefined);
     setShowModal("transaction");
   };
 
-  // --- Compute metrics (only active customers for the default view) ---
-  const activeCustomers = showArchived
-    ? customers
-    : customers.filter((c) => !c.is_archived);
-  const totalCustomers = activeCustomers.length;
+  // --- Compute metrics ---
+  const totalActive = activeCustomers.length;
+  const totalArchived = archivedCustomers.length;
   const totalCredit = activeCustomers.reduce(
     (sum, c) => sum + (c.balance > 0 ? c.balance : 0),
     0
@@ -355,8 +286,10 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
 
   const contactsSupported = isContactsApiSupported();
 
-  // Only show non-archived customers in the transaction select and list
-  const txSelectCustomers = customers.filter((c) => !c.is_archived);
+  // Customers to render based on active tab
+  const displayedCustomers = activeTab === "active" ? activeCustomers : archivedCustomers;
+  const allCustomersForModal = [...activeCustomers, ...archivedCustomers];
+
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -404,7 +337,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                 {fetching ? (
                   <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
                 ) : (
-                  totalCustomers
+                  totalActive
                 )}
               </p>
               <p className="mt-0.5 text-xs font-medium text-gray-500">
@@ -444,7 +377,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
           </div>
 
           {/* Analytics Widget */}
-          {analytics && !showArchived && (
+          {analytics && activeTab === "active" && (
             <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-emerald-600" />
@@ -523,30 +456,48 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
             </button>
           </div>
 
-          {/* Customer List */}
-          <div className="mb-3 mt-8 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-500">
-              {showArchived ? "الزبناء المؤرشفين" : "الزبناء ديالك"}
-            </h2>
-            <button
-              onClick={() => {
-                setShowArchived(!showArchived);
-                setOpenMenu(null);
-              }}
-              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-100"
-            >
-              {showArchived ? (
-                <>
-                  <Users className="h-3.5 w-3.5" />
-                  الزبناء النشيطين
-                </>
-              ) : (
-                <>
-                  <Archive className="h-3.5 w-3.5" />
-                  المؤرشفة
-                </>
-              )}
-            </button>
+          {/* Tabbed Customer List */}
+          <div className="mb-3 mt-8">
+            <div className="flex rounded-2xl bg-gray-100 p-1">
+              <button
+                onClick={() => {
+                  setActiveTab("active");
+                  setOpenMenu(null);
+                }}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+                  activeTab === "active"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                الزبناء النشيطين
+                {!fetching && (
+                  <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                    {totalActive}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("archived");
+                  setOpenMenu(null);
+                }}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
+                  activeTab === "archived"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <Archive className="h-4 w-4" />
+                الأرشيف
+                {!fetching && (
+                  <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                    {totalArchived}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           {fetchError && (
@@ -554,7 +505,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
               <AlertCircle className="h-5 w-5 flex-shrink-0" />
               <p className="text-sm">{fetchError}</p>
               <button
-                onClick={() => fetchCustomers(showArchived)}
+                onClick={fetchBoth}
                 className="mr-auto rounded-lg bg-red-100 px-3 py-1 text-sm font-medium hover:bg-red-200"
               >
                 حاول مرة أخرى
@@ -568,34 +519,39 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
             </div>
           )}
 
-          {!fetching && !fetchError && customers.length === 0 && (
+          {!fetching && !fetchError && displayedCustomers.length === 0 && (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
               <div className="mb-2 text-4xl">📒</div>
               <p className="font-medium text-gray-700">
-                {showArchived ? "تا زبون مؤرشف" : "تا زبون"}
+                {activeTab === "archived" ? "تا زبون مؤرشف" : "تا زبون"}
               </p>
               <p className="mt-1 text-sm text-gray-500">
-                {showArchived
+                {activeTab === "archived"
                   ? "مازال ما أرشفتي حتى زبون"
                   : "زيد أول زبون ديالك باش تبدأ"}
               </p>
             </div>
           )}
 
-          {!fetching && !fetchError && customers.length > 0 && (
+          {!fetching && !fetchError && displayedCustomers.length > 0 && (
             <div className="space-y-2">
-              {customers.map((c) => {
+              {displayedCustomers.map((c) => {
                 return (
                   <div
                     key={c.id}
-                    className={`relative flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm ${
-                      c.is_archived ? "opacity-60" : ""
-                    }`}
+                    className="relative flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-bold text-gray-900">
-                        {c.name}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate text-base font-bold text-gray-900">
+                          {c.name}
+                        </p>
+                        {activeTab === "archived" && (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                            📦 مؤرشف
+                          </span>
+                        )}
+                      </div>
                       {c.phone && (
                         <p
                           className="mt-0.5 text-xs text-gray-400"
@@ -628,7 +584,7 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                         </p>
                       </div>
 
-                      {c.phone && !c.is_archived && (
+                      {c.phone && activeTab === "active" && (
                         <ReminderButton
                           customerId={c.id}
                           phone={c.phone}
@@ -637,45 +593,50 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
                         />
                       )}
 
-                      {/* Dropdown menu trigger */}
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setOpenMenu(openMenu === c.id ? null : c.id)
-                          }
-                          className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-                          aria-label="خيارات"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
+                      {/* Active tab: dropdown menu. Archived tab: direct unarchive button */}
+                      {activeTab === "active" ? (
+                        <div className="relative">
+                          <button
+                            onClick={() =>
+                              setOpenMenu(openMenu === c.id ? null : c.id)
+                            }
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                            aria-label="خيارات"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
 
-                        {openMenu === c.id && (
-                          <>
-                            {/* Backdrop */}
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setOpenMenu(null)}
-                            />
-                            {/* Menu */}
-                            <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-                              <ArchiveCustomerButton
-                                customerId={c.id}
-                                isArchived={c.is_archived}
+                          {openMenu === c.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setOpenMenu(null)}
                               />
-                              <button
-                                onClick={() => {
-                                  setOpenMenu(null);
-                                  router.push(`/customers/${c.id}`);
-                                }}
-                                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
-                              >
-                                <MessageCircle className="h-4 w-4 text-blue-500" />
-                                التفاصيل
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                              <div className="absolute left-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                                <ArchiveCustomerButton
+                                  customerId={c.id}
+                                  isArchived={c.is_archived}
+                                />
+                                <button
+                                  onClick={() => {
+                                    setOpenMenu(null);
+                                    router.push(`/customers/${c.id}`);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50"
+                                >
+                                  <MessageCircle className="h-4 w-4 text-blue-500" />
+                                  التفاصيل
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <ArchiveCustomerButton
+                          customerId={c.id}
+                          isArchived={c.is_archived}
+                        />
+                      )}
                     </div>
                   </div>
                 );
@@ -835,144 +796,15 @@ export default function DashboardClient({ phone }: DashboardClientProps) {
 
       {/* ===== Add Transaction Modal ===== */}
       {showModal === "transaction" && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center"
-          onClick={() => setShowModal(null)}
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-6 sm:rounded-3xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">
-                زيد كريدي / خلاص
-              </h3>
-              <button
-                onClick={() => setShowModal(null)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200"
-                aria-label="سد"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddTransaction} className="space-y-4">
-              {/* Type toggle */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTxType("credit")}
-                  className={`rounded-xl px-4 py-4 text-base font-bold shadow-md transition ${
-                    txType === "credit"
-                      ? "bg-red-600 text-white ring-2 ring-red-300"
-                      : "bg-red-100 text-red-700 hover:bg-red-200"
-                  }`}
-                >
-                  🧾 كريدي (عليه)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTxType("payment")}
-                  className={`rounded-xl px-4 py-4 text-base font-bold shadow-md transition ${
-                    txType === "payment"
-                      ? "bg-emerald-600 text-white ring-2 ring-emerald-300"
-                      : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                  }`}
-                >
-                  💵 خلاص (عطى)
-                </button>
-              </div>
-
-              {/* Customer select */}
-              <div>
-                <label
-                  htmlFor="tx-customer"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  اختار الزبون
-                </label>
-                <select
-                  id="tx-customer"
-                  value={txCustomerId}
-                  onChange={(e) => setTxCustomerId(e.target.value)}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  <option value="">...</option>
-                  {txSelectCustomers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.balance !== 0 ? `(${formatAmount(c.balance)} درهم)` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <label
-                  htmlFor="tx-amount"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  المبلغ (درهم)
-                </label>
-                <input
-                  id="tx-amount"
-                  type="number"
-                  inputMode="decimal"
-                  value={txAmount}
-                  onChange={(e) => setTxAmount(e.target.value)}
-                  placeholder="0.00"
-                  dir="ltr"
-                  step="0.01"
-                  min="0.01"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-4 text-center text-3xl font-bold text-gray-900 placeholder:text-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-
-              {/* Description (Note) */}
-              <div>
-                <label
-                  htmlFor="tx-description"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  ملاحظة (اختياري)
-                </label>
-                <input
-                  id="tx-description"
-                  type="text"
-                  value={txDescription}
-                  onChange={(e) => setTxDescription(e.target.value)}
-                  placeholder="شرا خبز وحليب"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-
-              {txError && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-                  {txError}
-                </p>
-              )}
-
-              {txSuccess && (
-                <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" />
-                  تزادت المعاملة بنجاح!
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={txSubmitting}
-                className="flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
-              >
-                {txSubmitting ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  "تأكيد المعاملة"
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
+        <TransactionModal
+          customers={allCustomersForModal}
+          prefillCustomerId={prefillTxCustomer}
+          onClose={() => {
+            setShowModal(null);
+            setPrefillTxCustomer(undefined);
+          }}
+          onSuccess={handleTransactionSuccess}
+        />
       )}
     </main>
   );
